@@ -8,29 +8,25 @@ fn main(
     prev_block_id: pub [u8; 32],
     new_block_id: pub [u8; 32],
     tx_root: pub [u8; 32],
-    proposer_public_key: [u8; 64],
-    header: [u8; 256]
+
+    raw_data: [u8; 128],
+    raw_data_length: u64,
+    public_key: [u8; 64],
+    signature: [u8; 64]
 ) {
     // verify that the proposer is in allowlist
-    assert(ALLOWED_PRODUCERS.any(|x| x == proposer_public_key));
+    assert(ALLOWED_PRODUCERS.any(|x| x == public_key));
 
     // protobuf fuckery. in tron, everything is in protobuf
     let mut offset = 0;
 
-    assert(header[offset] & 7 == 2); // LEN
-    assert(header[offset] >> 3 == 1);
-    offset += 1;
-
-    let raw_data_length = header[offset]; // WARNING: we assume raw data is < 128 bytes
-    offset += 1;
-
-    assert(header[offset] & 7 == 0); // VARINT
-    assert(header[offset] >> 3 == 1);
+    assert(raw_data[offset] & 7 == 0); // VARINT
+    assert(raw_data[offset] >> 3 == 1);
     offset += 1;
 
     let mut done = false; // we don't need timestamp so we skip it
     for _ in 0..10 {
-        if (header[offset] & 0x80 == 0x80) & !done {
+        if (raw_data[offset] & 0x80 == 0x80) & !done {
             offset += 1;
         } else {
             done = true;
@@ -38,33 +34,33 @@ fn main(
     }
     offset += 1;
 
-    assert(header[offset] & 7 == 2); // LEN
-    assert(header[offset] >> 3 == 2);
+    assert(raw_data[offset] & 7 == 2); // LEN
+    assert(raw_data[offset] >> 3 == 2);
     offset += 2; // txroot length is always 32 (1 byte)
 
     for i in 0..32 {
-        assert(tx_root[i] == header[offset]);
+        assert(tx_root[i] == raw_data[offset]);
         offset += 1;
     }
 
-    assert(header[offset] & 7 == 2); // LEN
-    assert(header[offset] >> 3 == 3);
+    assert(raw_data[offset] & 7 == 2); // LEN
+    assert(raw_data[offset] >> 3 == 3);
     offset += 2; // prevblockhash length is always 32 (1 byte)
 
     for i in 0..32 {
-        assert(prev_block_id[i] == header[offset]);
+        assert(prev_block_id[i] == raw_data[offset]);
         offset += 1;
     }
 
-    assert(header[offset] & 7 == 0); // VARINT
-    assert(header[offset] >> 3 == 7);
+    assert(raw_data[offset] & 7 == 0); // VARINT
+    assert(raw_data[offset] >> 3 == 7);
     offset += 1;
 
     let mut block_number: u64 = 0;
     let mut done = false;
     for x in 0..4 { // max block number 2**28
         if !done {
-            let i = header[offset];
+            let i = raw_data[offset];
             block_number += (i & 0x7f) as u64 << (x * 7) as u8;
             done = (i & 0x80 == 0) as bool;
             offset += 1;
@@ -77,38 +73,10 @@ fn main(
     }
     assert(asserted_number == block_number);
 
-    assert(header[offset] & 7 == 2); // LEN
-    assert(header[offset] >> 3 == 9);
-    offset += 23; // we skip 21-byte witness_address here
-
-    assert(header[offset] & 7 == 0); // VARINT
-    assert(header[offset] >> 3 == 10);
-    offset += 2; // version; always 30
-
-    assert(header[offset] & 7 == 2); // VARINT
-    assert(header[offset] >> 3 == 2);
-    offset += 1;
-    assert(header[offset] == 65); // signature is always 65 bytes
-    offset += 1;
-
-    let mut signature_rs = [0; 64];
-    let mut signature_v = 0;
-    for i in 0..64 {
-        signature_rs[i] = header[offset];
-        offset += 1;
-    }
-    // AFAICT it's either 0 or 1 in tron implementation so i didn't constaint it
-    signature_v = header[offset];
-
-    let mut raw_data = [0; 128];
-    for i in 0..128 {
-        if i < raw_data_length {
-            raw_data[i] = header[i+2];
-        }
-    }
+    println("protobuf done");
 
     // block id in tron is block_number.to_bytes(8) + sha256(raw_data)[8:]
-    let message_hash = sha256_var(raw_data, raw_data_length as u64);
+    let message_hash = sha256_var(raw_data, raw_data_length);
     for i in 8..32 {
         assert(new_block_id[i] == message_hash[i]);
     }
@@ -117,8 +85,10 @@ fn main(
     let mut pub_key_y: [u8; 32] = [0; 32];
 
     for i in 0..32 {
-        pub_key_x[i] = proposer_public_key[i];
-        pub_key_y[i] = proposer_public_key[i + 32];
+        pub_key_x[i] = public_key[i];
+        pub_key_y[i] = public_key[i + 32];
     }
-    assert(verify_signature(pub_key_x, pub_key_y, signature_rs, message_hash));
+
+    println("hash done");
+    assert(verify_signature(pub_key_x, pub_key_y, signature, message_hash));
 }
