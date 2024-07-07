@@ -17,8 +17,4 @@ As we can ZK prove Tron's consensus, we can as well make some other blockchain a
 
 > **This thing is a PoC, probably unsafe and lacks some checks!**
 
-According to my tiny [research](https://github.com/alexhooketh/tron-light-client), SR set hasn't changed in at least the last 250 days. This is because the most existing SRs are funded with Justin Sun's TRX holdings, and other validators can only get enough delegations to become SR partners who don't participate in block production.
-
-So, I did not implement vote counts, and just wrote down the public keys of current SRs in the circuit. I believe it'll be cheaper to just redeploy the verifier every time the set is updated (almost never). I didn't implement round-robin production checks either, but AFAICT they're feasible to ZK prove.
-
-In `Prover.toml`, there's header data for block 62913164. You can fetch this data using [this script](https://github.com/alexhooketh/tron-light-client). In public inputs, there are only three values - previous block ID, new block ID, and a transaction root. Somewhat a state transition function :P
+TODO
